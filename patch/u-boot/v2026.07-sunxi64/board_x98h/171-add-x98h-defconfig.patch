@@ -1,0 +1,248 @@
+From 25669b44bab8ffdc4d07e140226c6385a9d13950 Mon Sep 17 00:00:00 2001
+From: Nick Alilovic <nickalilovic@gmail.com>
+Date: Tue, 11 Mar 2025 22:09:15 -0400
+Subject: [PATCH] add x98h defconfig
+
+add x98h defconfig
+---
+ configs/x98h_defconfig                        |  31 +++
+ .../src/arm64/allwinner/sun50i-h618-x98h.dts  | 223 ++++++++++++++++++
+ 2 files changed, 254 insertions(+)
+ create mode 100644 configs/x98h_defconfig
+ create mode 100644 dts/upstream/src/arm64/allwinner/sun50i-h618-x98h.dts
+
+diff --git a/configs/x98h_defconfig b/configs/x98h_defconfig
+new file mode 100644
+index 0000000000..b87498cd10
+--- /dev/null
++++ b/configs/x98h_defconfig
+@@ -0,0 +1,30 @@
++CONFIG_ARM=y
++CONFIG_ARCH_SUNXI=y
++CONFIG_DEFAULT_DEVICE_TREE="allwinner/sun50i-h618-x98h"
++CONFIG_SPL=y
++CONFIG_SUNXI_DRAM_H616_DDR3_1333=y
++CONFIG_DRAM_CLK=648
++CONFIG_DRAM_SUNXI_DX_ODT=0x03030303
++CONFIG_DRAM_SUNXI_DX_DRI=0x0e0e0e0e
++CONFIG_DRAM_SUNXI_CA_DRI=0x00001f12
++CONFIG_DRAM_SUNXI_TPR0=0xc0001002
++CONFIG_DRAM_SUNXI_TPR10=0x002f1107
++CONFIG_DRAM_SUNXI_TPR11=0xddddcccc
++CONFIG_DRAM_SUNXI_TPR12=0xeddc7665
++CONFIG_DRAM_SUNXI_TPR6=0x33808080
++CONFIG_MACH_SUN50I_H616=y
++CONFIG_SUNXI_H616_INTERNAL_EPHY=y
++CONFIG_MMC_SUNXI_SLOT_EXTRA=2
++CONFIG_R_I2C_ENABLE=y
++CONFIG_SPL_I2C=y
++CONFIG_SPL_SYS_I2C_LEGACY=y
++CONFIG_SYS_I2C_MVTWSI=y
++CONFIG_SYS_I2C_SLAVE=0x7f
++CONFIG_SYS_I2C_SPEED=400000
++CONFIG_SUPPORT_EMMC_BOOT=y
++CONFIG_PHY_REALTEK=y
++CONFIG_SUN8I_EMAC=y
++CONFIG_AXP313_POWER=y
++CONFIG_AXP_DCDC3_VOLT=1360
++CONFIG_USB_EHCI_HCD=y
++CONFIG_USB_OHCI_HCD=y
+diff --git a/dts/upstream/src/arm64/allwinner/sun50i-h618-x98h.dts b/dts/upstream/src/arm64/allwinner/sun50i-h618-x98h.dts
+new file mode 100644
+index 0000000000..7c76270dae
+--- /dev/null
++++ b/dts/upstream/src/arm64/allwinner/sun50i-h618-x98h.dts
+@@ -0,0 +1,190 @@
++// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
++/*
++ * Copyright (C) 2023 Arm Ltd.
++ */
++
++/dts-v1/;
++
++#include "sun50i-h616.dtsi"
++#include "sun50i-h616-cpu-opp.dtsi"
++
++#include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/interrupt-controller/arm-gic.h>
++
++/ {
++	model = "X98H";
++	compatible = "vontar,x98h", "allwinner,sun50i-h618";
++
++	aliases {
++		serial0 = &uart0;
++	};
++
++	chosen {
++		stdout-path = "serial0:115200n8";
++	};
++
++	reg_vcc5v: vcc5v {
++		/* board wide 5V supply directly from the DC input */
++		compatible = "regulator-fixed";
++		regulator-name = "vcc-5v";
++		regulator-min-microvolt = <5000000>;
++		regulator-max-microvolt = <5000000>;
++		regulator-always-on;
++	};
++
++	reg_vcc3v3: vcc3v3 {
++		/* discrete 3.3V regulator */
++		compatible = "regulator-fixed";
++		regulator-name = "vcc-3v3";
++		regulator-min-microvolt = <3300000>;
++		regulator-max-microvolt = <3300000>;
++		regulator-always-on;
++	};
++};
++
++&cpu0 {
++	cpu-supply = <&reg_dcdc2>;
++};
++
++&ehci0 {
++	status = "okay";
++};
++
++&ehci1 {
++	status = "okay";
++};
++
++&ir {
++	status = "okay";
++};
++
++&mmc0 {
++	vmmc-supply = <&reg_dldo1>;
++	cd-gpios = <&pio 5 6 (GPIO_ACTIVE_LOW | GPIO_PULL_DOWN)>; /* PF6 */
++	bus-width = <4>;
++	status = "okay";
++};
++
++&mmc2 {
++	vmmc-supply = <&reg_dldo1>;
++	vqmmc-supply = <&reg_aldo1>;
++	bus-width = <8>;
++	non-removable;
++	cap-mmc-hw-reset;
++	mmc-ddr-1_8v;
++	mmc-hs200-1_8v;
++	status = "okay";
++};
++
++&r_i2c {
++	status = "okay";
++
++	axp313: pmic@36 {
++		compatible = "x-powers,axp313a";
++		reg = <0x36>;
++		#interrupt-cells = <1>;
++		interrupt-controller;
++
++		vin1-supply = <&reg_vcc5v>;
++		vin2-supply = <&reg_vcc5v>;
++		vin3-supply = <&reg_vcc5v>;
++
++		regulators {
++			reg_aldo1: aldo1 {
++				regulator-always-on;
++				regulator-min-microvolt = <1800000>;
++				regulator-max-microvolt = <1800000>;
++				regulator-name = "vcc-1v8-pll";
++			};
++
++			reg_dldo1: dldo1 {
++				regulator-always-on;
++				regulator-min-microvolt = <3300000>;
++				regulator-max-microvolt = <3300000>;
++				regulator-name = "vcc-3v3-io-mmc";
++			};
++
++			reg_dcdc1: dcdc1 {
++				regulator-always-on;
++				regulator-min-microvolt = <810000>;
++				regulator-max-microvolt = <990000>;
++				regulator-name = "vdd-gpu-sys";
++			};
++
++			reg_dcdc2: dcdc2 {
++				regulator-always-on;
++				regulator-min-microvolt = <810000>;
++				regulator-max-microvolt = <1100000>;
++				regulator-name = "vdd-cpu";
++			};
++
++			reg_dcdc3: dcdc3 {
++				regulator-always-on;
++				regulator-min-microvolt = <1360000>;
++				regulator-max-microvolt = <1360000>;
++				regulator-name = "vdd-dram";
++			};
++		};
++	};
++};
++
++&pio {
++	vcc-pc-supply = <&reg_aldo1>;
++	vcc-pg-supply = <&reg_dldo1>;
++	vcc-ph-supply = <&reg_dldo1>;
++	vcc-pi-supply = <&reg_dldo1>;
++};
++
++&uart0 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&uart0_ph_pins>;
++	status = "okay";
++};
++
++&uart1 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&uart1_pins>, <&uart1_rts_cts_pins>;
++	uart-has-rtscts;
++	status = "okay";
++};
++
++&usbotg {
++	dr_mode = "host";	/* USB A type receptable */
++	status = "okay";
++};
++
++&usbphy {
++	status = "okay";
++};
++
++&ehci0 {
++	status = "okay";
++};
++
++&ehci1 {
++	status = "okay";
++};
++
++&ehci2 {
++	status = "okay";
++};
++
++&ehci3 {
++	status = "okay";
++};
++
++&ohci0 {
++	status = "okay";
++};
++
++&ohci1 {
++	status = "okay";
++};
++
++&ohci2 {
++	status = "okay";
++};
++
++&ohci3 {
++	status = "okay";
++};
+-- 
+2.34.1
+
