@@ -268,21 +268,29 @@
 	pinctrl-0 = <&uart1_pins>, <&uart1_rts_cts_pins>;
 	uart-has-rtscts;
 	status = "okay";
+};
 
-	bluetooth {
+/ {
+	rfkill {
+		compatible = "allwinner,sunxi-rfkill";
+		status = "okay";
+
+		bt {
+			compatible = "allwinner,sunxi-bt";
+			bt_rst_n = <&pio 6 19 GPIO_ACTIVE_LOW>;
+		};
+	};
+
+	btlpm {
 		compatible = "allwinner,sunxi-btlpm";
-		/* max-speed = <1500000>; */
-
-		clocks = <&rtc 1>;
-		clock-names = "lpo";
-		vbat-supply = <&reg_dldo1>;
-		vddio-supply = <&reg_dldo1>;
-		enable-gpios = <&pio 6 19 GPIO_ACTIVE_HIGH>;		/* PG19 bt_power */
-		reset-gpios = <&pio 6 13 GPIO_ACTIVE_LOW>;		/* PG13 bt_rst_n */
-		device-wakeup-gpios = <&pio 6 17 GPIO_ACTIVE_HIGH>;	/* PG17 bt_wake */
-		host-wakeup-gpios = <&pio 6 16 GPIO_ACTIVE_HIGH>;	/* PG16 bt_hostwake */
+		status = "okay";
+		uart_index = <1>;
+		bt_wake = <&pio 6 17 GPIO_ACTIVE_HIGH>;
+		bt_hostwake = <&pio 6 16 GPIO_ACTIVE_HIGH>;
+		wakeup-source;
 	};
 };
+
 &pwm {
 	status = "okay";
 };
