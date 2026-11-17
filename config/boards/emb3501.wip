@@ -1,0 +1,27 @@
+# NORCO EMB3501 with i.MX6 Quad, 2 GiB RAM, SD and eMMC
+BOARD_NAME="NORCO EMB3501"
+BOARD_VENDOR="norco"
+BOARDFAMILY="imx6"
+BOOTCONFIG="emb3501_defconfig"
+BOOTSCRIPT="boot-cubox.cmd:boot.cmd"
+BOOTENV_FILE="emb3501.txt"
+KERNEL_TARGET="current"
+KERNEL_TEST_TARGET="current"
+SERIALCON="ttymxc0"
+IMAGE_PARTITION_TABLE="msdos"
+
+function post_family_config__emb3501() {
+	declare -g UBOOT_TARGET_MAP="u-boot-with-spl.imx;;u-boot-with-spl.imx"
+	if [[ ${DISABLE_KERNEL_PATCHES:-} != yes ]]; then
+		KERNELPATCHDIR="${KERNELPATCHDIR:-archive/imx6-6.18} archive/imx6-emb3501-6.18"
+	fi
+
+	unset -f family_tweaks_bsp
+
+	function write_uboot_platform() {
+		dd if="$1/u-boot-with-spl.imx" of="$2" bs=1K seek=1 conv=notrunc,fsync status=none
+	}
+}
+function custom_kernel_config__emb3501_poweroff() {
+	opts_y+=(POWER_RESET POWER_RESET_SYSCON_POWEROFF)
+}

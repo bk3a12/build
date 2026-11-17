@@ -1,0 +1,571 @@
+diff --git a/arch/arm/dts/Makefile b/arch/arm/dts/Makefile
+index 2b65cd91..41c36d9e 100644
+--- a/arch/arm/dts/Makefile
++++ b/arch/arm/dts/Makefile
+@@ -782,6 +782,7 @@ dtb-y += \
+ 	imx6q-sabreauto.dtb \
+ 	imx6q-sabrelite.dtb \
+ 	imx6q-sabresd.dtb \
++	imx6q-emb3501.dtb \
+ 	imx6q-tbs2910.dtb \
+ 	imx6q-wandboard-revd1.dtb \
+ 	imx6qp-sabreauto.dtb \
+diff --git a/arch/arm/dts/imx6q-emb3501.dts b/arch/arm/dts/imx6q-emb3501.dts
+new file mode 100644
+index 00000000..11e10c8f
+--- /dev/null
++++ b/arch/arm/dts/imx6q-emb3501.dts
+@@ -0,0 +1,88 @@
++// SPDX-License-Identifier: GPL-2.0+
++/dts-v1/;
++
++#include <dt-bindings/gpio/gpio.h>
++#include "imx6q.dtsi"
++
++/ {
++	model = "NORCO EMB3501";
++	compatible = "norco,emb3501", "fsl,imx6q";
++
++	aliases {
++		usb0 = &usbotg;
++	};
++
++	chosen {
++		stdout-path = "serial0:115200n8";
++	};
++
++	memory@10000000 {
++		device_type = "memory";
++		reg = <0x10000000 0x80000000>;
++	};
++};
++
++&iomuxc {
++	pinctrl_uart1: uart1grp {
++		fsl,pins = <
++			MX6QDL_PAD_SD3_DAT7__UART1_TX_DATA	0x1b0b1
++			MX6QDL_PAD_SD3_DAT6__UART1_RX_DATA	0x1b0b1
++		>;
++	};
++
++	pinctrl_usdhc3: usdhc3grp {
++		fsl,pins = <
++			MX6QDL_PAD_SD3_CMD__SD3_CMD		0x17059
++			MX6QDL_PAD_SD3_CLK__SD3_CLK		0x10059
++			MX6QDL_PAD_SD3_DAT0__SD3_DATA0		0x17059
++			MX6QDL_PAD_SD3_DAT1__SD3_DATA1		0x17059
++			MX6QDL_PAD_SD3_DAT2__SD3_DATA2		0x17059
++			MX6QDL_PAD_SD3_DAT3__SD3_DATA3		0x17059
++			MX6QDL_PAD_SD3_DAT5__GPIO7_IO00		0x80000000
++		>;
++	};
++
++	pinctrl_usdhc4: usdhc4grp {
++		fsl,pins = <
++			MX6QDL_PAD_SD4_CMD__SD4_CMD		0x17059
++			MX6QDL_PAD_SD4_CLK__SD4_CLK		0x10059
++			MX6QDL_PAD_SD4_DAT0__SD4_DATA0		0x17059
++			MX6QDL_PAD_SD4_DAT1__SD4_DATA1		0x17059
++			MX6QDL_PAD_SD4_DAT2__SD4_DATA2		0x17059
++			MX6QDL_PAD_SD4_DAT3__SD4_DATA3		0x17059
++			MX6QDL_PAD_SD4_DAT4__SD4_DATA4		0x17059
++			MX6QDL_PAD_SD4_DAT5__SD4_DATA5		0x17059
++			MX6QDL_PAD_SD4_DAT6__SD4_DATA6		0x17059
++			MX6QDL_PAD_SD4_DAT7__SD4_DATA7		0x17059
++		>;
++	};
++};
++
++&uart1 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&pinctrl_uart1>;
++	status = "okay";
++};
++
++&usbotg {
++	dr_mode = "peripheral";
++	status = "okay";
++};
++
++&usdhc3 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&pinctrl_usdhc3>;
++	bus-width = <4>;
++	cd-gpios = <&gpio7 0 GPIO_ACTIVE_LOW>;
++	no-1-8-v;
++	status = "okay";
++};
++
++&usdhc4 {
++	pinctrl-names = "default";
++	pinctrl-0 = <&pinctrl_usdhc4>;
++	bus-width = <8>;
++	non-removable;
++	no-1-8-v;
++	status = "okay";
++};
+diff --git a/arch/arm/mach-imx/mx6/Kconfig b/arch/arm/mach-imx/mx6/Kconfig
+index d198d993..5f3d493f 100644
+--- a/arch/arm/mach-imx/mx6/Kconfig
++++ b/arch/arm/mach-imx/mx6/Kconfig
+@@ -390,6 +390,23 @@ config TARGET_MX6SABRESD
+ 	select FSL_CAAM
+ 	select ARCH_MISC_INIT
+ 
++config TARGET_EMB3501
++	bool "NORCO EMB3501"
++	depends on MX6QDL
++	select BOARD_EARLY_INIT_F
++	select BOARD_LATE_INIT
++	select DM
++	select DM_THERMAL
++	select SUPPORT_SPL
++	imply CMD_DM
++	select FSL_CAAM
++	select ARCH_MISC_INIT
++	help
++	  Build U-Boot for the NORCO EMB3501 with an i.MX6 Quad SoC.
++	  SPL configures the board's DDR from its factory register table
++	  and can load U-Boot from the SD slot, eMMC or USB serial
++	  downloader.
++
+ config TARGET_MX6SLEVK
+ 	bool "mx6slevk"
+ 	depends on MX6SL
+@@ -715,6 +732,7 @@ source "board/engicam/imx6ul/Kconfig"
+ source "board/nxp/mx6memcal/Kconfig"
+ source "board/nxp/mx6sabreauto/Kconfig"
+ source "board/nxp/mx6sabresd/Kconfig"
++source "board/norco/emb3501/Kconfig"
+ source "board/nxp/mx6slevk/Kconfig"
+ source "board/nxp/mx6sllevk/Kconfig"
+ source "board/nxp/mx6sxsabresd/Kconfig"
+diff --git a/board/norco/emb3501/Kconfig b/board/norco/emb3501/Kconfig
+new file mode 100644
+index 00000000..f50dd26a
+--- /dev/null
++++ b/board/norco/emb3501/Kconfig
+@@ -0,0 +1,12 @@
++if TARGET_EMB3501
++
++config SYS_BOARD
++	default "emb3501"
++
++config SYS_VENDOR
++	default "norco"
++
++config SYS_CONFIG_NAME
++	default "emb3501"
++
++endif
+diff --git a/board/norco/emb3501/Makefile b/board/norco/emb3501/Makefile
+new file mode 100644
+index 00000000..bfba9f93
+--- /dev/null
++++ b/board/norco/emb3501/Makefile
+@@ -0,0 +1,2 @@
++# SPDX-License-Identifier: GPL-2.0+
++obj-y := emb3501.o
+diff --git a/board/norco/emb3501/emb3501.c b/board/norco/emb3501/emb3501.c
+new file mode 100644
+index 00000000..908e702a
+--- /dev/null
++++ b/board/norco/emb3501/emb3501.c
+@@ -0,0 +1,268 @@
++// SPDX-License-Identifier: GPL-2.0+
++/*
++ * NORCO EMB3501 i.MX6Q board support.
++ * Early initialization is based on the i.MX6 SABRE SD board.
++ * Copyright (C) 2012 Freescale Semiconductor, Inc.
++ */
++
++#include <fsl_esdhc_imx.h>
++#include <init.h>
++#include <asm/arch/clock.h>
++#include <asm/arch/imx-regs.h>
++#include <asm/arch/mx6-pins.h>
++#include <asm/arch/sys_proto.h>
++#include <asm/global_data.h>
++#include <asm/gpio.h>
++#include <asm/io.h>
++#include <asm/mach-imx/boot_mode.h>
++#include <asm/sections.h>
++#include <linux/errno.h>
++#include <linux/kernel.h>
++#include <linux/string.h>
++#include <spl.h>
++
++DECLARE_GLOBAL_DATA_PTR;
++
++#define EMB3501_SD_CD IMX_GPIO_NR(7, 0)
++
++static const iomux_v3_cfg_t uart1_pads[] = {
++	IOMUX_PADS(PAD_SD3_DAT7__UART1_TX_DATA | MUX_PAD_CTRL(0x1b0b1)),
++	IOMUX_PADS(PAD_SD3_DAT6__UART1_RX_DATA | MUX_PAD_CTRL(0x1b0b1)),
++};
++
++int board_early_init_f(void)
++{
++	SETUP_IOMUX_PADS(uart1_pads);
++	return 0;
++}
++
++int dram_init(void)
++{
++	gd->ram_size = imx_ddr_size();
++	return 0;
++}
++
++int board_init(void)
++{
++	gd->bd->bi_boot_params = CFG_SYS_SDRAM_BASE + 0x100;
++	return 0;
++}
++
++#ifdef CONFIG_CMD_BMODE
++static const struct boot_mode emb3501_boot_modes[] = {
++	{ "sd3", MAKE_CFGVAL(0x40, 0x30, 0, 0) },
++	{ "emmc", MAKE_CFGVAL(0x60, 0x58, 0, 0) },
++	{ NULL, 0 },
++};
++#endif
++
++int board_late_init(void)
++{
++#ifdef CONFIG_CMD_BMODE
++	add_board_boot_modes(emb3501_boot_modes);
++#endif
++	return 0;
++}
++
++#ifdef CONFIG_XPL_BUILD
++/* USDHC3 uses DAT0-DAT3. DAT5 is card detect and DAT6/7 are UART1. */
++static const iomux_v3_cfg_t usdhc3_pads[] = {
++	IOMUX_PADS(PAD_SD3_CMD__SD3_CMD | MUX_PAD_CTRL(0x17059)),
++	IOMUX_PADS(PAD_SD3_CLK__SD3_CLK | MUX_PAD_CTRL(0x10059)),
++	IOMUX_PADS(PAD_SD3_DAT0__SD3_DATA0 | MUX_PAD_CTRL(0x17059)),
++	IOMUX_PADS(PAD_SD3_DAT1__SD3_DATA1 | MUX_PAD_CTRL(0x17059)),
++	IOMUX_PADS(PAD_SD3_DAT2__SD3_DATA2 | MUX_PAD_CTRL(0x17059)),
++	IOMUX_PADS(PAD_SD3_DAT3__SD3_DATA3 | MUX_PAD_CTRL(0x17059)),
++	IOMUX_PADS(PAD_SD3_DAT5__GPIO7_IO00 | MUX_PAD_CTRL(NO_PAD_CTRL)),
++};
++
++static const iomux_v3_cfg_t usdhc4_pads[] = {
++	IOMUX_PADS(PAD_SD4_CMD__SD4_CMD | MUX_PAD_CTRL(0x17059)),
++	IOMUX_PADS(PAD_SD4_CLK__SD4_CLK | MUX_PAD_CTRL(0x10059)),
++	IOMUX_PADS(PAD_SD4_DAT0__SD4_DATA0 | MUX_PAD_CTRL(0x17059)),
++	IOMUX_PADS(PAD_SD4_DAT1__SD4_DATA1 | MUX_PAD_CTRL(0x17059)),
++	IOMUX_PADS(PAD_SD4_DAT2__SD4_DATA2 | MUX_PAD_CTRL(0x17059)),
++	IOMUX_PADS(PAD_SD4_DAT3__SD4_DATA3 | MUX_PAD_CTRL(0x17059)),
++	IOMUX_PADS(PAD_SD4_DAT4__SD4_DATA4 | MUX_PAD_CTRL(0x17059)),
++	IOMUX_PADS(PAD_SD4_DAT5__SD4_DATA5 | MUX_PAD_CTRL(0x17059)),
++	IOMUX_PADS(PAD_SD4_DAT6__SD4_DATA6 | MUX_PAD_CTRL(0x17059)),
++	IOMUX_PADS(PAD_SD4_DAT7__SD4_DATA7 | MUX_PAD_CTRL(0x17059)),
++};
++
++static struct fsl_esdhc_cfg spl_usdhc;
++
++int board_mmc_getcd(struct mmc *mmc)
++{
++	if (spl_usdhc.esdhc_base == USDHC3_BASE_ADDR)
++		return !gpio_get_value(EMB3501_SD_CD);
++
++	return 1;
++}
++
++int board_mmc_init(struct bd_info *bis)
++{
++	u32 boot_cfg = imx6_src_get_boot_mode();
++
++	/* BOOT_CFG2[4:3] encodes the USDHC controller index. */
++	switch ((boot_cfg >> 11) & 3) {
++	case 2:
++		SETUP_IOMUX_PADS(usdhc3_pads);
++		gpio_direction_input(EMB3501_SD_CD);
++		spl_usdhc.esdhc_base = USDHC3_BASE_ADDR;
++		spl_usdhc.sdhc_clk = mxc_get_clock(MXC_ESDHC3_CLK);
++		spl_usdhc.max_bus_width = 4;
++		break;
++	case 3:
++		SETUP_IOMUX_PADS(usdhc4_pads);
++		spl_usdhc.esdhc_base = USDHC4_BASE_ADDR;
++		spl_usdhc.sdhc_clk = mxc_get_clock(MXC_ESDHC4_CLK);
++		spl_usdhc.max_bus_width = 8;
++		break;
++	default:
++		return -ENODEV;
++	}
++
++	gd->arch.sdhc_clk = spl_usdhc.sdhc_clk;
++	return fsl_esdhc_initialize(bis, &spl_usdhc);
++}
++
++struct emb3501_reg_write {
++	u32 addr;
++	u32 value;
++};
++
++/*
++ * The factory DCD runs from the Boot ROM before U-Boot. Replay its 32-bit
++ * writes from OCRAM before touching DDR or clearing the BSS. Keep the
++ * repeated MMDC MDSCR writes in order because they issue DDR commands.
++ */
++static const struct emb3501_reg_write emb3501_init[] = {
++	/* DDR I/O pads and drive strength. */
++	{ 0x020e0798, 0x000c0000 }, /* IOMUXC_GRP_DDR_TYPE */
++	{ 0x020e0758, 0x00000000 }, /* IOMUXC_GRP_DDRPKE */
++	{ 0x020e0588, 0x00000038 },
++	{ 0x020e0594, 0x00000038 },
++	{ 0x020e056c, 0x00000038 },
++	{ 0x020e0578, 0x00000038 },
++	{ 0x020e074c, 0x00000038 },
++	{ 0x020e057c, 0x00000038 },
++	{ 0x020e058c, 0x00000000 },
++	{ 0x020e059c, 0x00000038 },
++	{ 0x020e05a0, 0x00000038 },
++	{ 0x020e078c, 0x00000038 },
++	{ 0x020e0750, 0x00020000 },
++	{ 0x020e05a8, 0x00000038 },
++	{ 0x020e05b0, 0x00000038 },
++	{ 0x020e0524, 0x00000038 },
++	{ 0x020e051c, 0x00000038 },
++	{ 0x020e0518, 0x00000038 },
++	{ 0x020e050c, 0x00000038 },
++	{ 0x020e05b8, 0x00000038 },
++	{ 0x020e05c0, 0x00000038 },
++	{ 0x020e0774, 0x00020000 },
++	{ 0x020e0784, 0x00000038 },
++	{ 0x020e0788, 0x00000038 },
++	{ 0x020e0794, 0x00000038 },
++	{ 0x020e079c, 0x00000038 },
++	{ 0x020e07a0, 0x00000038 },
++	{ 0x020e07a4, 0x00000038 },
++	{ 0x020e07a8, 0x00000038 },
++	{ 0x020e0748, 0x00000038 },
++	{ 0x020e05ac, 0x00000038 },
++	{ 0x020e05b4, 0x00000038 },
++	{ 0x020e0528, 0x00000038 },
++	{ 0x020e0520, 0x00000038 },
++	{ 0x020e0514, 0x00000038 },
++	{ 0x020e0510, 0x00000038 },
++	{ 0x020e05bc, 0x00000038 },
++	{ 0x020e05c4, 0x00000038 },
++	/* MMDC geometry, timing, calibration and DDR commands. */
++	{ 0x021b001c, 0x00008000 }, /* MMDC0_MDSCR */
++	{ 0x021b0800, 0xa1390003 }, /* MMDC0_MPZQHWCTRL */
++	{ 0x021b080c, 0x001d0015 }, /* MMDC0_MPWLDECTRL0 */
++	{ 0x021b0810, 0x0026001d }, /* MMDC0_MPWLDECTRL1 */
++	{ 0x021b480c, 0x00180028 }, /* MMDC1_MPWLDECTRL0 */
++	{ 0x021b4810, 0x00120025 }, /* MMDC1_MPWLDECTRL1 */
++	{ 0x021b083c, 0x03500368 }, /* MMDC0_MPDGCTRL0 */
++	{ 0x021b0840, 0x0340033c }, /* MMDC0_MPDGCTRL1 */
++	{ 0x021b483c, 0x03480360 }, /* MMDC1_MPDGCTRL0 */
++	{ 0x021b4840, 0x034c0314 }, /* MMDC1_MPDGCTRL1 */
++	{ 0x021b0848, 0x463c3e44 }, /* MMDC0_MPRDDLCTL */
++	{ 0x021b4848, 0x44403c4c }, /* MMDC1_MPRDDLCTL */
++	{ 0x021b0850, 0x3c404442 }, /* MMDC0_MPWRDLCTL */
++	{ 0x021b4850, 0x48384e3e }, /* MMDC1_MPWRDLCTL */
++	{ 0x021b081c, 0x33333333 }, /* MMDC0_MPRDDQBY0DL */
++	{ 0x021b0820, 0x33333333 }, /* MMDC0_MPRDDQBY1DL */
++	{ 0x021b0824, 0x33333333 }, /* MMDC0_MPRDDQBY2DL */
++	{ 0x021b0828, 0x33333333 }, /* MMDC0_MPRDDQBY3DL */
++	{ 0x021b481c, 0x33333333 }, /* MMDC1_MPRDDQBY0DL */
++	{ 0x021b4820, 0x33333333 }, /* MMDC1_MPRDDQBY1DL */
++	{ 0x021b4824, 0x33333333 }, /* MMDC1_MPRDDQBY2DL */
++	{ 0x021b4828, 0x33333333 }, /* MMDC1_MPRDDQBY3DL */
++	{ 0x021b08b8, 0x00000800 }, /* MMDC0_MPMUR0 */
++	{ 0x021b48b8, 0x00000800 }, /* MMDC1_MPMUR0 */
++	{ 0x021b0004, 0x00020036 }, /* MMDC0_MDPDC */
++	{ 0x021b0008, 0x09444040 }, /* MMDC0_MDOTC */
++	{ 0x021b000c, 0x898e79a4 }, /* MMDC0_MDCFG0 */
++	{ 0x021b0010, 0xdb538f64 }, /* MMDC0_MDCFG1 */
++	{ 0x021b0014, 0x01ff00dd }, /* MMDC0_MDCFG2 */
++	{ 0x021b0018, 0x00011740 }, /* MMDC0_MDMISC */
++	{ 0x021b001c, 0x00008000 }, /* MMDC0_MDSCR */
++	{ 0x021b002c, 0x000026d2 }, /* MMDC0_MDRWD */
++	{ 0x021b0030, 0x008e1023 }, /* MMDC0_MDOR */
++	{ 0x021b0040, 0x00000047 }, /* MMDC0_MDASP */
++	{ 0x021b0000, 0x841a0000 }, /* MMDC0_MDCTL */
++	{ 0x021b001c, 0x02888032 }, /* MMDC0_MDSCR */
++	{ 0x021b001c, 0x00008033 }, /* MMDC0_MDSCR */
++	{ 0x021b001c, 0x00048031 }, /* MMDC0_MDSCR */
++	{ 0x021b001c, 0x19308030 }, /* MMDC0_MDSCR */
++	{ 0x021b001c, 0x04008040 }, /* MMDC0_MDSCR */
++	{ 0x021b0020, 0x00007800 }, /* MMDC0_MDREF */
++	{ 0x021b0818, 0x00022227 }, /* MMDC0_MPODTCTRL */
++	{ 0x021b4818, 0x00022227 }, /* MMDC1_MPODTCTRL */
++	{ 0x021b0004, 0x00025576 }, /* MMDC0_MDPDC */
++	{ 0x021b0404, 0x00011006 }, /* MMDC0_MAPSR */
++	{ 0x021b001c, 0x00000000 }, /* MMDC0_MDSCR */
++	/* Clock gates. */
++	{ 0x020c4068, 0x00c03f3f }, /* CCM_CCGR0 */
++	{ 0x020c406c, 0x0030fc03 }, /* CCM_CCGR1 */
++	{ 0x020c4070, 0x0fffc000 }, /* CCM_CCGR2 */
++	{ 0x020c4074, 0x3ff00000 }, /* CCM_CCGR3 */
++	{ 0x020c4078, 0x00fff300 }, /* CCM_CCGR4 */
++	{ 0x020c407c, 0x0f0000f3 }, /* CCM_CCGR5 */
++	{ 0x020c4080, 0x000003ff }, /* CCM_CCGR6 */
++	/* IOMUXC AXI cache and IPU QoS. */
++	{ 0x020e0010, 0xf00000cf }, /* IOMUXC_GPR4 */
++	{ 0x020e0018, 0x007f007f }, /* IOMUXC_GPR6 */
++	{ 0x020e001c, 0x007f007f }, /* IOMUXC_GPR7 */
++	/* CCM clock output selection. */
++	{ 0x020c4060, 0x000000fb }, /* CCM_CCOSR */
++};
++
++void board_init_f(ulong dummy)
++{
++	unsigned int i;
++
++	for (i = 0; i < ARRAY_SIZE(emb3501_init); i++)
++		writel(emb3501_init[i].value,
++		       (void __iomem *)(uintptr_t)emb3501_init[i].addr);
++
++	/* The factory table already sets CCGR and the IOMUXC GPRs. */
++	arch_cpu_init();
++
++	/* Keep the EMB3501 UART pinmux and common SPL handoff. */
++	board_early_init_f();
++	timer_init();
++	preloader_console_init();
++
++	memset(__bss_start, 0, __bss_end - __bss_start);
++	board_init_r(NULL, 0);
++}
++#endif
++
++#ifdef CONFIG_SPL_LOAD_FIT
++int board_fit_config_name_match(const char *name)
++{
++	return strcmp(name, "imx6q-emb3501") ? -1 : 0;
++}
++#endif
+diff --git a/board/norco/emb3501/emb3501.env b/board/norco/emb3501/emb3501.env
+new file mode 100644
+index 00000000..3783b817
+--- /dev/null
++++ b/board/norco/emb3501/emb3501.env
+@@ -0,0 +1,12 @@
++console=ttymxc0
++boot_targets=mmc2 mmc3
++fdtfile=imx6q-emb3501.dtb
++fdt_addr=0x18000000
++fdt_addr_r=0x18000000
++fdt_high=0x20000000
++initrd_high=0x20000000
++kernel_addr_r=0x12000000
++ramdisk_addr_r=0x1a000000
++scriptaddr=0x14000000
++pxefile_addr_r=0x14100000
++emmc_dev=3
+diff --git a/configs/emb3501_defconfig b/configs/emb3501_defconfig
+new file mode 100644
+index 00000000..467b6569
+--- /dev/null
++++ b/configs/emb3501_defconfig
+@@ -0,0 +1,86 @@
++CONFIG_ARM=y
++CONFIG_ARCH_MX6=y
++CONFIG_SYS_MALLOC_LEN=0xa00000
++CONFIG_SYS_MALLOC_F_LEN=0x4000
++CONFIG_SPL_GPIO=y
++CONFIG_SPL_LIBCOMMON_SUPPORT=y
++CONFIG_NR_DRAM_BANKS=1
++CONFIG_SF_DEFAULT_SPEED=20000000
++CONFIG_ENV_SIZE=0x2000
++CONFIG_MX6QDL=y
++CONFIG_TARGET_EMB3501=y
++CONFIG_DM_GPIO=y
++CONFIG_DEFAULT_DEVICE_TREE="imx6q-emb3501"
++CONFIG_SYS_MONITOR_LEN=409600
++CONFIG_SPL_MMC=y
++CONFIG_SPL_SERIAL=y
++CONFIG_SPL=y
++CONFIG_SPL_LIBDISK_SUPPORT=y
++CONFIG_LTO=y
++CONFIG_HAS_BOARD_SIZE_LIMIT=y
++CONFIG_BOARD_SIZE_LIMIT=715766
++CONFIG_FIT=y
++CONFIG_SPL_FIT_PRINT=y
++CONFIG_SPL_LOAD_FIT=y
++CONFIG_BOOTSTD_FULL=y
++# CONFIG_BOOTMETH_VBE is not set
++CONFIG_SYS_PBSIZE=532
++CONFIG_SPL_LEGACY_IMAGE_FORMAT=y
++CONFIG_SPL_SYS_MALLOC=y
++CONFIG_SPL_FIT_IMAGE_TINY=y
++CONFIG_SPL_WATCHDOG=y
++CONFIG_SYS_MAXARGS=32
++# CONFIG_BOOTM_PLAN9 is not set
++# CONFIG_BOOTM_RTEMS is not set
++CONFIG_CMD_GPIO=y
++CONFIG_CMD_I2C=y
++CONFIG_CMD_MMC=y
++CONFIG_CMD_USB=y
++CONFIG_CMD_USB_SDP=y
++CONFIG_CMD_USB_MASS_STORAGE=y
++CONFIG_CMD_CACHE=y
++CONFIG_CMD_EXT4_WRITE=y
++# CONFIG_SPL_DOS_PARTITION is not set
++# CONFIG_SPL_EFI_PARTITION is not set
++CONFIG_OF_CONTROL=y
++# CONFIG_NET is not set
++CONFIG_BOUNCE_BUFFER=y
++CONFIG_USB_FUNCTION_FASTBOOT=y
++CONFIG_FASTBOOT_BUF_ADDR=0x12000000
++CONFIG_FASTBOOT_BUF_SIZE=0x10000000
++CONFIG_FASTBOOT_FLASH=y
++CONFIG_FASTBOOT_FLASH_MMC_DEV=3
++CONFIG_DM_I2C=y
++CONFIG_SYS_I2C_MXC=y
++CONFIG_SUPPORT_EMMC_BOOT=y
++CONFIG_FSL_USDHC=y
++CONFIG_MTD=y
++CONFIG_DM_SPI_FLASH=y
++# CONFIG_SPI_FLASH_LOCK is not set
++CONFIG_SPI_FLASH_STMICRO=y
++CONFIG_PINCTRL=y
++CONFIG_PINCTRL_IMX6=y
++CONFIG_DM_REGULATOR=y
++CONFIG_DM_REGULATOR_FIXED=y
++CONFIG_DM_REGULATOR_GPIO=y
++CONFIG_DM_SERIAL=y
++CONFIG_MXC_UART=y
++CONFIG_SPI=y
++CONFIG_DM_SPI=y
++CONFIG_MXC_SPI=y
++CONFIG_SYSRESET=y
++CONFIG_SYSRESET_WATCHDOG=y
++CONFIG_IMX_THERMAL=y
++CONFIG_USB=y
++CONFIG_SPL_USB_HOST=y
++CONFIG_USB_HOST_ETHER=y
++CONFIG_USB_ETHER_ASIX=y
++CONFIG_USB_GADGET=y
++CONFIG_SPL_USB_GADGET=y
++CONFIG_USB_GADGET_MANUFACTURER="FSL"
++CONFIG_USB_GADGET_VENDOR_NUM=0x0525
++CONFIG_USB_GADGET_PRODUCT_NUM=0xa4a5
++CONFIG_CI_UDC=y
++CONFIG_SPL_USB_SDP_SUPPORT=y
++CONFIG_IMX_WATCHDOG=y
++# CONFIG_WATCHDOG_AUTOSTART is not set
+diff --git a/include/configs/emb3501.h b/include/configs/emb3501.h
+new file mode 100644
+index 00000000..7020c1bc
+--- /dev/null
++++ b/include/configs/emb3501.h
+@@ -0,0 +1,13 @@
++/* SPDX-License-Identifier: GPL-2.0+ */
++#ifndef __EMB3501_CONFIG_H
++#define __EMB3501_CONFIG_H
++
++#include "mx6_common.h"
++
++#define CFG_MXC_UART_BASE	UART1_BASE
++#define CFG_SYS_FSL_ESDHC_ADDR	0
++#define CFG_SYS_SDRAM_BASE	MMDC0_ARB_BASE_ADDR
++#define CFG_SYS_INIT_RAM_ADDR	IRAM_BASE_ADDR
++#define CFG_SYS_INIT_RAM_SIZE	IRAM_SIZE
++
++#endif

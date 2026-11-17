@@ -1,0 +1,8 @@
+config:
+
+  # .dts files in these directories will be copied as-is to the build tree; later ones overwrite earlier ones.
+  # This is meant to provide a way to "add a board DTS" without having to null-patch them in.
+  dts-directories:
+    - { source: "dt_32", target: "arch/arm/boot/dts/nxp/imx" }
+  auto-patch-dt-makefile:
+    - { directory: "arch/arm/boot/dts/nxp/imx", config-var: "CONFIG_SOC_IMX6Q" }
