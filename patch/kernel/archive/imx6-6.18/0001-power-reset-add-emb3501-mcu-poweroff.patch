@@ -1,0 +1,312 @@
+diff --git a/drivers/power/reset/Kconfig b/drivers/power/reset/Kconfig
+index 8248895..4522a2c 100644
+--- a/drivers/power/reset/Kconfig
++++ b/drivers/power/reset/Kconfig
+@@ -291,6 +291,17 @@ config POWER_RESET_SYSCON
+ 	help
+ 	  Reboot support for generic SYSCON mapped register reset.
+ 
++config POWER_RESET_EMB3501_MCU
++	tristate "NORCO EMB3501 MCU power-off driver"
++	depends on I2C && OF
++	depends on ARCH_MXC || COMPILE_TEST
++	help
++	  Send the NORCO EMB3501 power-off sequence to the board MCU over
++	  I2C during power-off preparation.
++
++	  To compile this driver as a module, choose M here: the module
++	  will be called emb3501_mcu_poweroff.
++
+ config POWER_RESET_SYSCON_POWEROFF
+ 	bool "Generic SYSCON regmap poweroff driver"
+ 	depends on OF
+diff --git a/drivers/power/reset/Makefile b/drivers/power/reset/Makefile
+index 51da87e..d695c99 100644
+--- a/drivers/power/reset/Makefile
++++ b/drivers/power/reset/Makefile
+@@ -33,6 +33,7 @@ obj-$(CONFIG_POWER_RESET_VEXPRESS) += vexpress-poweroff.o
+ obj-$(CONFIG_POWER_RESET_XGENE) += xgene-reboot.o
+ obj-$(CONFIG_POWER_RESET_KEYSTONE) += keystone-reset.o
+ obj-$(CONFIG_POWER_RESET_SYSCON) += syscon-reboot.o
++obj-$(CONFIG_POWER_RESET_EMB3501_MCU) += emb3501_mcu_poweroff.o
+ obj-$(CONFIG_POWER_RESET_SYSCON_POWEROFF) += syscon-poweroff.o
+ obj-$(CONFIG_POWER_RESET_RMOBILE) += rmobile-reset.o
+ obj-$(CONFIG_REBOOT_MODE) += reboot-mode.o
+diff --git a/drivers/power/reset/emb3501_mcu_poweroff.c b/drivers/power/reset/emb3501_mcu_poweroff.c
+new file mode 100644
+index 0000000..3a0a5bd
+--- /dev/null
++++ b/drivers/power/reset/emb3501_mcu_poweroff.c
+@@ -0,0 +1,272 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * NORCO EMB3501 board MCU (Nuvoton N79E8132A) power-off driver.
++ *
++ * The sequence is reconstructed from the vendor 3.14.52 BSP, where
++ * mcu_poweroff() is called from kernel_power_off() after device_shutdown():
++ *
++ *   1. read 1 byte from register 0xa1 (the BSP ignores the value)
++ *   2. read the 32-byte ID block from register 0x00 (firmware version,
++ *      board id and serial number, as printed by the BSP's sysfs show)
++ *   3. write the block back as one 32-byte frame with frame[2] = 0xaa
++ *   4. sleep one second while the MCU cuts power
++ *
++ * On the wire frame[i] is rx[i + 1] for i = 0..30, and frame[31] is 0x80.
++ * That layout falls out of the BSP's stack usage: it copies the read result
++ * starting two bytes into the receive buffer, then transmits from one byte
++ * before the copy. Byte 31 is uninitialised stack in the BSP and was 0x80
++ * on every captured shutdown.
++ */
++#include <linux/delay.h>
++#include <linux/errno.h>
++#include <linux/i2c.h>
++#include <linux/ktime.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/reboot.h>
++#include <linux/slab.h>
++#include <linux/string.h>
++
++#define EMB3501_MCU_BLOCK_LEN		32
++#define EMB3501_MCU_REG_ID		0x00
++#define EMB3501_MCU_REG_STATUS		0xa1
++
++/* Offsets into the block as read from register 0x00 (rx[]) */
++#define EMB3501_MCU_RX_FW		2
++#define EMB3501_MCU_RX_BOARD_ID		13	/* big endian u16 */
++#define EMB3501_MCU_RX_SERIAL		15
++#define EMB3501_MCU_SERIAL_LEN		8
++
++#define EMB3501_MCU_CMD_OFFSET		2
++#define EMB3501_MCU_CMD_POWEROFF	0xaa
++#define EMB3501_MCU_FRAME_TAIL		0x80
++
++static unsigned int retries = 3;
++module_param(retries, uint, 0644);
++MODULE_PARM_DESC(retries,
++		 "Attempts to read a non-zero ID block at power-off (default 3)");
++
++static unsigned int retry_delay_ms = 50;
++module_param(retry_delay_ms, uint, 0644);
++MODULE_PARM_DESC(retry_delay_ms, "Delay between those attempts (default 50)");
++
++static unsigned int probe_tries = 100;
++module_param(probe_tries, uint, 0644);
++MODULE_PARM_DESC(probe_tries,
++		 "Attempts to read the ID block at probe, the MCU needs up to ~100 ms after power-up (default 100)");
++
++static unsigned int probe_retry_ms = 10;
++module_param(probe_retry_ms, uint, 0644);
++MODULE_PARM_DESC(probe_retry_ms, "Delay between probe attempts (default 10)");
++
++static bool force_write;
++module_param(force_write, bool, 0644);
++MODULE_PARM_DESC(force_write,
++		 "If no ID block is available, still send the frame built from an all-zero block (for experiments)");
++
++struct emb3501_mcu {
++	struct i2c_client *client;
++	u8 *rx;		/* kmalloc'd, so DMA-safe */
++	u8 *tx;
++	u8 id[EMB3501_MCU_BLOCK_LEN];	/* block read at probe */
++	bool have_id;
++};
++
++static int emb3501_mcu_read_reg(struct emb3501_mcu *mcu, u8 reg, u8 *buf,
++				u16 len, u16 buf_flags)
++{
++	struct i2c_client *client = mcu->client;
++	u8 sel = reg;
++	struct i2c_msg msgs[] = {
++		{ .addr = client->addr, .len = 1, .buf = &sel },
++		{ .addr = client->addr, .flags = I2C_M_RD | buf_flags,
++		  .len = len, .buf = buf },
++	};
++	int ret;
++
++	ret = i2c_transfer(client->adapter, msgs, ARRAY_SIZE(msgs));
++	if (ret != (int)ARRAY_SIZE(msgs))
++		return ret < 0 ? ret : -EIO;
++
++	return 0;
++}
++
++static int emb3501_mcu_read_block(struct emb3501_mcu *mcu)
++{
++	int ret;
++
++	ret = emb3501_mcu_read_reg(mcu, EMB3501_MCU_REG_ID, mcu->rx,
++				   EMB3501_MCU_BLOCK_LEN, I2C_M_DMA_SAFE);
++	if (ret)
++		return ret;
++
++	/* Right after MCU power-up the transfer succeeds but the block is zero. */
++	if (!memchr_inv(mcu->rx, 0, EMB3501_MCU_BLOCK_LEN))
++		return -ENODATA;
++
++	/*
++	 * The MCU then fills the block in stages: the serial number shows up
++	 * first, the firmware version and board id roughly 100 ms later.
++	 * Don't accept a block until the firmware version is there.
++	 */
++	if (!mcu->rx[EMB3501_MCU_RX_FW])
++		return -EAGAIN;
++
++	return 0;
++}
++
++static int emb3501_mcu_send_frame(struct emb3501_mcu *mcu)
++{
++	struct i2c_client *client = mcu->client;
++	struct i2c_msg msg = {
++		.addr = client->addr,
++		.flags = I2C_M_DMA_SAFE,
++		.len = EMB3501_MCU_BLOCK_LEN,
++		.buf = mcu->tx,
++	};
++	int ret;
++
++	memcpy(mcu->tx, mcu->rx + 1, EMB3501_MCU_BLOCK_LEN - 1);
++	mcu->tx[EMB3501_MCU_CMD_OFFSET] = EMB3501_MCU_CMD_POWEROFF;
++	mcu->tx[EMB3501_MCU_BLOCK_LEN - 1] = EMB3501_MCU_FRAME_TAIL;
++
++	/* Bring-up logging: demote to dev_dbg() once this is settled. */
++	dev_emerg(&client->dev, "MCU power-off tx=%*phN\n",
++		  EMB3501_MCU_BLOCK_LEN, mcu->tx);
++
++	ret = i2c_transfer(client->adapter, &msg, 1);
++	if (ret != 1)
++		return ret < 0 ? ret : -EIO;
++
++	return 0;
++}
++
++static int emb3501_mcu_poweroff(struct sys_off_data *data)
++{
++	struct emb3501_mcu *mcu = data->cb_data;
++	struct device *dev = &mcu->client->dev;
++	unsigned int i, tries = max(retries, 1U);
++	const char *src = "live";
++	int ret = -ENODATA;
++	u8 status;
++
++	for (i = 0; i < tries && ret; i++) {
++		if (i)
++			msleep(retry_delay_ms);
++
++		/* The BSP reads this register first and ignores the value. */
++		ret = emb3501_mcu_read_reg(mcu, EMB3501_MCU_REG_STATUS,
++					   &status, 1, 0);
++		if (ret) {
++			dev_emerg(dev, "MCU status read failed: %d\n", ret);
++			continue;
++		}
++
++		ret = emb3501_mcu_read_block(mcu);
++		if (ret)
++			dev_emerg(dev, "MCU ID block read %u/%u: %d (status %02x)\n",
++				  i + 1, tries, ret, status);
++	}
++
++	if (ret) {
++		if (mcu->have_id) {
++			memcpy(mcu->rx, mcu->id, EMB3501_MCU_BLOCK_LEN);
++			src = "probe-time";
++		} else if (force_write) {
++			memset(mcu->rx, 0, EMB3501_MCU_BLOCK_LEN);
++			src = "all-zero (forced)";
++		} else {
++			dev_emerg(dev, "MCU: no valid ID block, not sending power-off\n");
++			return NOTIFY_DONE;
++		}
++	}
++
++	dev_emerg(dev, "MCU: using %s ID block\n", src);
++	ret = emb3501_mcu_send_frame(mcu);
++	if (ret) {
++		dev_emerg(dev, "MCU power-off write failed: %d\n", ret);
++		return NOTIFY_DONE;
++	}
++
++	/* Give the MCU time to cut power, as the BSP does. */
++	msleep(1000);
++
++	return NOTIFY_DONE;
++}
++
++static int emb3501_mcu_probe(struct i2c_client *client)
++{
++	struct device *dev = &client->dev;
++	struct emb3501_mcu *mcu;
++	unsigned int i, tries = max(probe_tries, 1U);
++	ktime_t start = ktime_get();
++	int ret = -ENODATA;
++
++	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
++		return -EOPNOTSUPP;
++
++	mcu = devm_kzalloc(dev, sizeof(*mcu), GFP_KERNEL);
++	if (!mcu)
++		return -ENOMEM;
++
++	mcu->client = client;
++	mcu->rx = devm_kzalloc(dev, EMB3501_MCU_BLOCK_LEN, GFP_KERNEL);
++	mcu->tx = devm_kzalloc(dev, EMB3501_MCU_BLOCK_LEN, GFP_KERNEL);
++	if (!mcu->rx || !mcu->tx)
++		return -ENOMEM;
++
++	/*
++	 * The BSP reads the ID block at probe time too. On some boots the MCU
++	 * returns zeros this early, so retry and log how long it took.
++	 */
++	for (i = 0; i < tries && ret; i++) {
++		if (i)
++			msleep(probe_retry_ms);
++		ret = emb3501_mcu_read_block(mcu);
++	}
++
++	if (ret) {
++		dev_warn(dev, "MCU ID block read failed after %u attempts (%lld ms): %d\n",
++			 tries, ktime_to_ms(ktime_sub(ktime_get(), start)), ret);
++	} else {
++		memcpy(mcu->id, mcu->rx, EMB3501_MCU_BLOCK_LEN);
++		mcu->have_id = true;
++		dev_info(dev, "MCU firmware V%02X, board id %u, serial %*phN (attempt %u, %lld ms)\n",
++			 mcu->rx[EMB3501_MCU_RX_FW],
++			 (unsigned int)((mcu->rx[EMB3501_MCU_RX_BOARD_ID] << 8) |
++					mcu->rx[EMB3501_MCU_RX_BOARD_ID + 1]),
++			 EMB3501_MCU_SERIAL_LEN,
++			 &mcu->rx[EMB3501_MCU_RX_SERIAL], i,
++			 ktime_to_ms(ktime_sub(ktime_get(), start)));
++	}
++
++	ret = devm_register_sys_off_handler(dev,
++					    SYS_OFF_MODE_POWER_OFF_PREPARE,
++					    SYS_OFF_PRIO_DEFAULT,
++					    emb3501_mcu_poweroff, mcu);
++	if (ret)
++		return ret;
++
++	dev_info(dev, "NORCO MCU power-off preparation enabled\n");
++	return 0;
++}
++
++static const struct of_device_id emb3501_mcu_of_match[] = {
++	{ .compatible = "mxc,mcu" },
++	{ .compatible = "norco,mcu" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, emb3501_mcu_of_match);
++
++static struct i2c_driver emb3501_mcu_driver = {
++	.driver = {
++		.name = "emb3501-mcu-poweroff",
++		.of_match_table = emb3501_mcu_of_match,
++	},
++	.probe = emb3501_mcu_probe,
++};
++module_i2c_driver(emb3501_mcu_driver);
++
++MODULE_DESCRIPTION("NORCO EMB3501 MCU power-off");
++MODULE_LICENSE("GPL");
++MODULE_VERSION("1");

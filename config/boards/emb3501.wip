@@ -24,4 +24,7 @@ function post_family_config__emb3501() {
 }
 function custom_kernel_config__emb3501_poweroff() {
 	opts_y+=(POWER_RESET POWER_RESET_SYSCON_POWEROFF)
+	if [[ ${DISABLE_KERNEL_PATCHES:-} != yes ]]; then
+		opts_m+=(POWER_RESET_EMB3501_MCU)
+	fi
 }
